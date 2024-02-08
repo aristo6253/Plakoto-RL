@@ -29,6 +29,9 @@ class Plakoto:
         board[0] = [0, PIECES_PER_PLAYER, False, 0]
         return board
     
+    def initialize_board_custom(self, board):
+        self.board = board
+    
     def switch_player(self):
         self.current_player = 2 if self.current_player == 1 else 1
 
@@ -52,10 +55,10 @@ class Plakoto:
         return self.move_history
     
     def all_pieces_home(self):
-        print(f'Current player: {self.current_player}')
+        # print(f'Current player: {self.current_player}')
         start, end = (0, 6) if self.current_player == 1 else (18, 24)
         pieces_in = sum(pieces[self.current_player - 1] for _, pieces in enumerate(self.board[start:end]))
-        print(f'Pieces in: {pieces_in}')
+        # print(f'Pieces in: {pieces_in}')
         return pieces_in == 15
 
     def furthermost_piece(self):
@@ -65,6 +68,16 @@ class Plakoto:
         elif self.current_player == 2:
             max_index = np.min(np.nonzero(occupation))
         return max_index
+    
+    def piece_can_born_off(self, start, end):
+        if self.furthermost_piece() == start:
+            target = -1 if self.current_player == 1 else 24
+            if abs(end - target) in self.get_moves:
+                return True
+        return False
+
+
+
 
     
     def is_valid_move(self, start, end, verbose=True):
@@ -81,10 +94,25 @@ class Plakoto:
                 print(f"Invalid start point for player {self.current_player}: {start}")
             return False
         
-        if not (0 <= end < NUM_POINTS):
-            if verbose:
-                print(f"Invalid end point for player {self.current_player}: {end}")
-            return False
+        can_bear_off = self.all_pieces_home()
+        # print("CAN BEAR OFF -> ", can_bear_off)
+        
+        if can_bear_off:
+            if self.current_player == 1:
+                if not (-1 <= end < NUM_POINTS):
+                    if verbose:
+                        print(f"Invalid end point for player {self.current_player}: {end}")
+                    return False
+            else:
+                if not (0 <= end < NUM_POINTS + 1):
+                    if verbose:
+                        print(f"Invalid end point for player {self.current_player}: {end}")
+                    return False
+        else:
+            if not (0 <= end < NUM_POINTS):
+                if verbose:
+                    print(f"Invalid end point for player {self.current_player}: {end}")
+                return False
         
         # Ensure start point has at least one piece of the current player
         player_pieces = self.board[start][self.current_player - 1]
@@ -106,19 +134,23 @@ class Plakoto:
         opponent = 2 if self.current_player == 1 else 1
         # print(f'Opponent: {opponent}, end: {end}')
         # print(f'Shape of board: {self.board[end]}')
-        opponent_pieces = self.board[end][opponent - 1]
-        is_pinned = self.board[end][2]
-        pinning_player = self.board[end][3]
-        if opponent_pieces >= 2:
-            if verbose:
-                print(f"Cannot move to a point with two or more opponent pieces at point {end}")
-            return False
-        if opponent_pieces == 1 and not is_pinned:
-            return True
+        if (opponent == 1 and end != -1) and (opponent == 2 and end != 24):
+            opponent_pieces = self.board[end][opponent - 1]
+            is_pinned = self.board[end][2]
+            pinning_player = self.board[end][3]
+            if opponent_pieces >= 2:
+                if verbose:
+                    print(f"Cannot move to a point with two or more opponent pieces at point {end}")
+                return False
+            if opponent_pieces == 1 and not is_pinned:
+                return True
         
-        if self.board[end][2] and self.board[end][3] == opponent:
-            if verbose:
-                print(f"Cannot move to a pinned point at point {end}")
+            if self.board[end][2] and self.board[end][3] == opponent:
+                if verbose:
+                    print(f"Cannot move to a pinned point at point {end}")
+                return False
+            
+        if end == -1 or end == 24:
             return False
         
         # print(f'Am I pinned? {self.board[start][2]} by {self.board[start][3]}')
@@ -148,7 +180,7 @@ class Plakoto:
     def move_piece(self, start, end):
         print(f"Moving piece from {start} to {end}")
         can_bear_off = self.all_pieces_home()
-        print(f'Can bear off? {can_bear_off}')
+        # print(f'Can bear off? {can_bear_off}')
         opponent = 2 if self.current_player == 1 else 1
         opponent_pieces = self.board[end][opponent - 1]
         is_pinned = self.board[end][2]
@@ -214,13 +246,21 @@ class Plakoto:
             print(f"Dice roll: {self.dice}")
             print(f"Possible moves: {self.moves}")
             print(f"Valid moves: {valid_moves}")
+            can_bear_off = self.all_pieces_home()
+            print(f'Can bear off? {can_bear_off}')
         if len(valid_moves) == 0:
             if verbose:
                 print("No valid moves")
             self.switch_player()
 
     def play_turn(self, start, end, verbose=True):
-        # Assume turn has been set up
+        # valid_moves = self.get_valid_moves()
+        # print("VM", len(valid_moves))
+        # if len(valid_moves) == 0:
+        #     if verbose:
+        #         print("No valid moves")
+        #     self.switch_player()
+
         if not self.move_piece(start, end) and verbose:
             print("Try again")
 
