@@ -5,13 +5,6 @@ NUM_POINTS = 24
 PIECES_PER_PLAYER = 15
 
 # TODO:
-# - Implement is_game_over()
-# - Include the double rolls mechanic (done)
-# - Include the mother checker rule
-# - Complete the bearing off mechanic
-# - Make robust state representation
-# - Maintain a history of moves
-# - Reinforce the rules of the game
 
 
 class Plakoto:
@@ -22,6 +15,8 @@ class Plakoto:
         self.borne_off = [0, 0]
         self.move_history = []
         self.moves = []
+        self.winner = 0
+        self.game_over = (False, 0) # Is game over, and what type of win
 
     def initialize_board(self):
         board = [[0, 0, False, 0] for _ in range(NUM_POINTS)]
@@ -51,6 +46,9 @@ class Plakoto:
     def get_moves(self):
         return self.moves
     
+    def get_winner(self):
+        return self.winner
+
     def get_move_history(self):
         return self.move_history
     
@@ -59,7 +57,7 @@ class Plakoto:
         start, end = (0, 6) if self.current_player == 1 else (18, 24)
         pieces_in = sum(pieces[self.current_player - 1] for _, pieces in enumerate(self.board[start:end]))
         # print(f'Pieces in: {pieces_in}')
-        return pieces_in == 15
+        return pieces_in + self.borne_off[self.current_player - 1] == 15
 
     def furthermost_piece(self):
         occupation = (np.array([pos[self.current_player - 1] for pos in self.board]) > 0)*1
@@ -69,7 +67,7 @@ class Plakoto:
             max_index = np.min(np.nonzero(occupation))
         return max_index
     
-    def piece_can_born_off(self, start, end):
+    def piece_can_born_off(self, start, end):   # Useless?
         if self.furthermost_piece() == start:
             target = -1 if self.current_player == 1 else 24
             if abs(end - target) in self.get_moves:
@@ -82,13 +80,8 @@ class Plakoto:
     
     def is_valid_move(self, start, end, verbose=True):
         # print(f"Validating move from {start} to {end}")
-        # Ensure start and end are within the board
-        # Allow 'off the board' moves for bearing off
-        # if not (0 <= start < NUM_POINTS) or (self.current_player == 1 and end > NUM_POINTS) or (self.current_player == 2 and end < -1):
-        #     if verbose:
-        #         print(f"Invalid start or end point for player {self.current_player}: {start}, {end}")
-        #     return False
-        
+
+        # Start position inbound
         if not (0 <= start < NUM_POINTS):
             if verbose:
                 print(f"Invalid start point for player {self.current_player}: {start}")
@@ -97,22 +90,6 @@ class Plakoto:
         can_bear_off = self.all_pieces_home()
         # print("CAN BEAR OFF -> ", can_bear_off)
         
-        if can_bear_off:
-            if self.current_player == 1:
-                if not (-1 <= end < NUM_POINTS):
-                    if verbose:
-                        print(f"Invalid end point for player {self.current_player}: {end}")
-                    return False
-            else:
-                if not (0 <= end < NUM_POINTS + 1):
-                    if verbose:
-                        print(f"Invalid end point for player {self.current_player}: {end}")
-                    return False
-        else:
-            if not (0 <= end < NUM_POINTS):
-                if verbose:
-                    print(f"Invalid end point for player {self.current_player}: {end}")
-                return False
         
         # Ensure start point has at least one piece of the current player
         player_pieces = self.board[start][self.current_player - 1]
@@ -124,20 +101,28 @@ class Plakoto:
         
         # Check if the move matches the dice roll
         move_check = abs(end - start) in self.moves
+
         if not move_check:
             if verbose:
                 print(f'Invalid move: {abs(end - start)} does not match the dice roll {self.moves}')
             return False
+        
+        # print("\tBearOff Test ->", can_bear_off and (end < 0 or end > NUM_POINTS - 1))
+        # print(f"\tVars: Can I bear Off -> {can_bear_off}, Target {end}")
+        if can_bear_off and (end < 0 or end > NUM_POINTS - 1):
+            # print(f"\tCan I bear Off -> {can_bear_off}, Target {end}")
+            last_piece = self.furthermost_piece()
+            if start != last_piece:
+                return False
         
         # Check for blocking or pinning
         # For Plakoto, a piece can pin an opponent's single piece, but cannot move to a point with two or more opponent pieces
         opponent = 2 if self.current_player == 1 else 1
         # print(f'Opponent: {opponent}, end: {end}')
         # print(f'Shape of board: {self.board[end]}')
-        if (opponent == 1 and end != -1) and (opponent == 2 and end != 24):
+        if (opponent == 1 and end >= 0) and (opponent == 2 and end < NUM_POINTS):
             opponent_pieces = self.board[end][opponent - 1]
             is_pinned = self.board[end][2]
-            pinning_player = self.board[end][3]
             if opponent_pieces >= 2:
                 if verbose:
                     print(f"Cannot move to a point with two or more opponent pieces at point {end}")
@@ -150,7 +135,7 @@ class Plakoto:
                     print(f"Cannot move to a pinned point at point {end}")
                 return False
             
-        if end == -1 or end == 24:
+        if (end < 0 or end > NUM_POINTS - 1) and (not can_bear_off):
             return False
         
         # print(f'Am I pinned? {self.board[start][2]} by {self.board[start][3]}')
@@ -159,32 +144,23 @@ class Plakoto:
                 print(f"Cannot move pinned piece at point {start}")
             return False
         
-
-        
-        # # Check for bearing off
-        # if self.all_pieces_home():
-        #     if self.current_player == 1 and end == NUM_POINTS:
-        #         # Player 1 is bearing off
-        #         if start + self.dice[0] > NUM_POINTS - 1 or start + self.dice[1] > NUM_POINTS - 1:
-        #             return True
-        #         elif self.current_player == 2 and end == -1:
-        #             # Player 2 is bearing off
-        #             if start - self.dice[0] < 0 or start - self.dice[1] < 0:
-        #                 return True
-        #             else:
-        #                 return False
-                    
+       
         return True
                     
     
     def move_piece(self, start, end):
-        print(f"Moving piece from {start} to {end}")
+        # print(f"Moving piece from {start} to {end}")
         can_bear_off = self.all_pieces_home()
         # print(f'Can bear off? {can_bear_off}')
         opponent = 2 if self.current_player == 1 else 1
-        opponent_pieces = self.board[end][opponent - 1]
-        is_pinned = self.board[end][2]
-        pinning_player = self.board[end][3]
+        
+        if 0 <= end < NUM_POINTS:
+            opponent_pieces = self.board[end][opponent - 1]
+            is_pinned = self.board[end][2]
+        else:
+            opponent_pieces = 0
+            is_pinned = False
+
         # Later make it a while loop
         if self.is_valid_move(start, end):
             player = self.current_player - 1
@@ -194,12 +170,14 @@ class Plakoto:
                 self.board[start][2] = False
                 self.board[start][3] = 0
 
-            if (self.current_player == 1 and end == NUM_POINTS) or (self.current_player == 2 and end == -1):
+            if (self.current_player == 2 and end > NUM_POINTS - 1) or (self.current_player == 1 and end < 0):
+                # print("ENDDD (yes) ", end)
                 self.borne_off[player] += 1
             else:
+                # print("ENDDD (not) ", end)
                 self.board[end][player] += 1
                 if opponent_pieces == 1 and not is_pinned:
-                    print("Pinning opponent piece")
+                    # print("Pinning opponent piece")
                     self.board[end][2] = True
                     self.board[end][3] = self.current_player
 
@@ -237,29 +215,30 @@ class Plakoto:
         pass
 
     def setup_turn(self, verbose=True):
+        if self.game_over[0]:
+            if verbose:
+                print(f"Game over! Player {self.winner} won!")
+            return
+        
         if verbose:
             print(f"Player {self.current_player}'s turn")
         self.roll_dice()
         self.dice_moves()
         valid_moves = self.get_valid_moves()
+
         if verbose:
             print(f"Dice roll: {self.dice}")
             print(f"Possible moves: {self.moves}")
             print(f"Valid moves: {valid_moves}")
             can_bear_off = self.all_pieces_home()
             print(f'Can bear off? {can_bear_off}')
+
         if len(valid_moves) == 0:
             if verbose:
                 print("No valid moves")
             self.switch_player()
 
     def play_turn(self, start, end, verbose=True):
-        # valid_moves = self.get_valid_moves()
-        # print("VM", len(valid_moves))
-        # if len(valid_moves) == 0:
-        #     if verbose:
-        #         print("No valid moves")
-        #     self.switch_player()
 
         if not self.move_piece(start, end) and verbose:
             print("Try again")
@@ -275,13 +254,19 @@ class Plakoto:
         if verbose:
             self.visualize_board()
 
-        if self.is_game_over() != 0:
-            if self.is_game_over() == 1:
+        game_over = self.is_game_over()
+        # print("Game over? ", game_over)
+        if game_over != 0:
+            self.winner = self.current_player
+            if game_over == 1:
                 print(f"Player {self.current_player} wins by simple win!")
-            elif self.is_game_over() == 2:
+                self.game_over = (True, 1)
+            elif game_over == 2:
                 print(f"Player {self.current_player} wins by double win!")
-            elif self.is_game_over() == 3:
+                self.game_over = (True, 2)
+            elif game_over == 3:
                 print(f"Player {self.current_player} wins by triple win!")
+                self.game_over = (True, 3)
         
 
 
@@ -291,16 +276,19 @@ class Plakoto:
         # Return 1 if game is over by simple win
         # Return 2 if game is over by double win
         # Return 3 if game is over by triple win
-        if self.borne_off[0] == PIECES_PER_PLAYER or self.borne_off[1] == PIECES_PER_PLAYER:
-            return 1
-        elif self.borne_off[0] == PIECES_PER_PLAYER and self.borne_off[1] == 0:
-            return 2
-        elif self.borne_off[1] == PIECES_PER_PLAYER and self.borne_off[0] == 0:
-            return 2
-        # elif mother checker is captured:
-        #     return 3
-        else:
-            return 0
+        player = self.current_player - 1
+        opponent = 1 if player == 0 else 0
+        opp_mother = 23 if player == 0 else 0
+
+        if self.borne_off[player] == PIECES_PER_PLAYER:
+            if self.borne_off[opponent] == 0:
+                return 2
+            else:
+                return 1
+        elif self.board[opp_mother][2] == True:
+            return 3
+        
+        return 0
 
     def visualize_board(self):
         max_height = 1
