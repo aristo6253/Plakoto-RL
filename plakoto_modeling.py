@@ -74,9 +74,6 @@ class Plakoto:
                 return True
         return False
 
-
-
-
     
     def is_valid_move(self, start, end, verbose=True):
         # print(f"Validating move from {start} to {end}")
@@ -205,14 +202,37 @@ class Plakoto:
         return valid_moves
 
     def get_state(self):
-        pass
+        # May need normalization 
+        flat_board = [val for sublist in self.board for val in sublist]
+
+        current_player = [self.current_player]
+
+        borne_off_pieces = self.borne_off
+
+        return flat_board + current_player + borne_off_pieces
 
     def get_reward(self):
         # 0 for loss
         # 1 for simple win
         # 2 for double win (collecting all pieces without opponent bearing off any pieces)
         # 3 for triple win (capturing the mother checker)
-        pass
+        reward_simple = 100
+        reward_double = 200
+        reward_triple = 300
+        reward_loss = -100
+
+
+        if self.game_over[0]:
+            if self.game_over[1] == 1:
+                return reward_simple
+            elif self.game_over[1] == 2:
+                return reward_double
+            elif self.game_over[1] == 3:
+                return reward_triple
+        else:
+            return reward_loss
+            
+        
 
     def setup_turn(self, verbose=True):
         if self.game_over[0]:
